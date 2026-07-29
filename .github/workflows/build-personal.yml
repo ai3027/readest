@@ -5,8 +5,11 @@ name: Build Personal
 # in). Triggered manually; artifacts are downloaded from the run page.
 #
 # Trimmed from release.yml's build-tauri job: no GitHub Release, no signing
-# secrets, no R2/attestation/latest.json. APK uses the default debug keystore
-# (fine for sideloading on your own devices; not for store distribution).
+# secrets, no R2/attestation/latest.json. APK is built as a signed release by
+# generating a one-off keystore on every run (fine for sideloading on your own
+# devices; not for store distribution). Because the keystore is regenerated
+# each run, the signing key changes between builds — you must uninstall the old
+# app before installing a new build.
 
 on:
   workflow_dispatch:
@@ -71,6 +74,20 @@ jobs:
           pnpm tauri android init
           pnpm tauri icon ../../data/icons/readest-book.png
           git checkout .
+          # Generate a one-off release keystore so the release build type gets a
+          # signingConfig (build.gradle.kts only wires one up when keystore.properties
+          # exists; otherwise the APK comes out unsigned and Android refuses to
+          # install it with "packageinfo is null"). Distinguished names with commas
+          # must be quoted; the password is arbitrary since we never distribute this.
+          keytool -genkeypair -v \
+            -keystore src-tauri/gen/android/app/release.keystore \
+            -alias release \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass readest -keypass readest \
+            -dname "CN=Readest Personal, O=Personal, C=US"
+          printf 'storeFile=release.keystore\npassword=readest\nkeyAlias=release\nkeyPassword=readest\n' \
+            > src-tauri/gen/android/keystore.properties
+
           # arm64-only: smallest APK, covers essentially all modern phones.
           pnpm tauri android build -t aarch64
 
@@ -105,8 +122,14 @@ jobs:
       - name: copy pdfjs-dist and simplecc-dist to public directory
         run: pnpm --filter @readest/readest-app setup-vendors
 
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      # Pinned to 1.81 (not `stable`) on purpose: the `battery` 0.7.8 crate
+      # (pulled in transitively via tauri-plugin-device-info) takes references
+      # to fields of `#[repr(packed)]` Windows FFI structs, which became a
+      # hard error (E0793) starting in Rust 1.82. `battery` is unmaintained
+      # (last release 2022), so a stable toolchain can no longer build it.
+      # 1.81 is the last version before that error landed.
+      - name: install Rust 1.81
+        uses: dtolnay/rust-toolchain@1.81.0
         with:
           targets: i686-pc-windows-msvc
 
