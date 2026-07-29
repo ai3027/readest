@@ -1,0 +1,129 @@
+name: Build Personal
+
+# Personal build: produces an Android APK and a Windows NSIS installer with the
+# third-party cloud-sync paywall disabled (WebDAV/S3/Drive work without signing
+# in). Triggered manually; artifacts are downloaded from the run page.
+#
+# Trimmed from release.yml's build-tauri job: no GitHub Release, no signing
+# secrets, no R2/attestation/latest.json. APK uses the default debug keystore
+# (fine for sideloading on your own devices; not for store distribution).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: initialize git submodules
+        run: git submodule update --init --recursive
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: install NDK 28.2.13676358
+        run: sdkmanager "ndk;28.2.13676358"
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: copy pdfjs-dist and simplecc-dist to public directory
+        run: pnpm --filter @readest/readest-app setup-vendors
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ubuntu-android-cargo
+
+      - name: build Android APK (arm64)
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+        run: |
+          cd apps/readest-app/
+          # Regenerate the Android project then restore the repo's checked-in
+          # version so keystore/signing config matches what the app expects.
+          rm -rf src-tauri/gen/android
+          pnpm tauri android init
+          pnpm tauri icon ../../data/icons/readest-book.png
+          git checkout .
+          # arm64-only: smallest APK, covers essentially all modern phones.
+          pnpm tauri android build -t aarch64
+
+      - name: upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: readest-android-apk
+          path: apps/readest-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: initialize git submodules
+        run: git submodule update --init --recursive
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: copy pdfjs-dist and simplecc-dist to public directory
+        run: pnpm --filter @readest/readest-app setup-vendors
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-x86_64-cargo
+
+      - name: build Windows installer (NSIS, x64)
+        shell: bash
+        run: |
+          cd apps/readest-app/
+          pnpm build-win-x64
+
+      - name: upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: readest-windows-installer
+          # build-win-x64 targets i686-pc-windows-msvc but emits an x64-setup NSIS bundle
+          path: apps/readest-app/src-tauri/target/i686-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
