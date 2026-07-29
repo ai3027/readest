@@ -1,13 +1,9 @@
 name: Publish Docker image
 
 on:
+  # Originally ran on push to main, on release publish, and manually. In this
+  # fork it is manual-only to avoid auto-running in CI.
   workflow_dispatch:
-  push:
-    branches:
-      - main
-  release:
-    types:
-      - published
 
 concurrency:
   group: publish-docker-image-${{ github.event.release.tag_name || github.ref }}

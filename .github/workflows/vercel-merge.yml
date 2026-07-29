@@ -1,8 +1,8 @@
 name: Deploy to vercel on merge
 on:
-  push:
-    branches:
-      - main
+  # Originally ran on push to main. In this fork it is manual-only to avoid
+  # auto-running in CI.
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

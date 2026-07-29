@@ -9,8 +9,8 @@
 name: Nightly Readest
 
 on:
-  schedule:
-    - cron: '0 22 * * *' # 22:00 UTC = 06:00 GMT+8
+  # Originally ran on schedule + manual; in this fork it is manual-only to
+  # avoid auto-running in CI.
   workflow_dispatch:
 
 permissions:
