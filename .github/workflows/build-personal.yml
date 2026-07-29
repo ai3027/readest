@@ -122,14 +122,8 @@ jobs:
       - name: copy pdfjs-dist and simplecc-dist to public directory
         run: pnpm --filter @readest/readest-app setup-vendors
 
-      # Pinned to 1.81 (not `stable`) on purpose: the `battery` 0.7.8 crate
-      # (pulled in transitively via tauri-plugin-device-info) takes references
-      # to fields of `#[repr(packed)]` Windows FFI structs, which became a
-      # hard error (E0793) starting in Rust 1.82. `battery` is unmaintained
-      # (last release 2022), so a stable toolchain can no longer build it.
-      # 1.81 is the last version before that error landed.
-      - name: install Rust 1.81
-        uses: dtolnay/rust-toolchain@1.81.0
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: i686-pc-windows-msvc
 
