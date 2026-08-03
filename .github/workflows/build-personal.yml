@@ -135,6 +135,15 @@ jobs:
         shell: bash
         run: |
           cd apps/readest-app/
+          # This job intentionally has no signing secrets (see header), but
+          # tauri.conf.json sets createUpdaterArtifacts:true + an updater
+          # pubkey, so Tauri would try to sign updater artifacts and fail with
+          # "A public key has been found, but no private key". Personal builds
+          # aren't distributed or auto-updated, so disable updater artifact
+          # generation here — only the installable NSIS setup .exe is produced,
+          # which is all a personal sideload needs. The NSIS installer itself
+          # is usable unsigned (unlike an unsigned Android APK).
+          node -e "const f='src-tauri/tauri.conf.json';const c=JSON.parse(require('fs').readFileSync(f,'utf8'));c.bundle.createUpdaterArtifacts=false;require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
           pnpm build-win-x64
 
       - name: upload Windows installer
